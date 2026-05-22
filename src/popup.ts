@@ -189,8 +189,14 @@ style.textContent = `
   .row-actions {
     grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 8px;
+  }
+
+  .row-actions button:disabled {
+    color: #8c959f;
+    cursor: not-allowed;
+    opacity: 0.6;
   }
 
   .empty-state {
@@ -372,7 +378,7 @@ const buildCounterList = (): HTMLElement => {
   list.className = "counter-list";
   list.setAttribute("aria-label", "カウンター一覧");
 
-  for (const counter of state.counters) {
+  state.counters.forEach((counter, index) => {
     const item = document.createElement("li");
     item.className = "counter-row";
     item.dataset.counterId = counter.id;
@@ -401,6 +407,24 @@ const buildCounterList = (): HTMLElement => {
 
     const actions = document.createElement("div");
     actions.className = "row-actions";
+
+    const moveUp = document.createElement("button");
+    moveUp.type = "button";
+    moveUp.disabled = index === 0;
+    moveUp.setAttribute("aria-label", `${counter.name}を上に移動`);
+    moveUp.textContent = "↑";
+    moveUp.addEventListener("click", () => {
+      void moveCounter(counter.id, -1);
+    });
+
+    const moveDown = document.createElement("button");
+    moveDown.type = "button";
+    moveDown.disabled = index === state.counters.length - 1;
+    moveDown.setAttribute("aria-label", `${counter.name}を下に移動`);
+    moveDown.textContent = "↓";
+    moveDown.addEventListener("click", () => {
+      void moveCounter(counter.id, 1);
+    });
 
     const increment = document.createElement("button");
     increment.type = "button";
@@ -441,10 +465,10 @@ const buildCounterList = (): HTMLElement => {
       void deleteCounter(counter.id);
     });
 
-    actions.append(increment, decrement, reset, edit, remove);
+    actions.append(moveUp, moveDown, increment, decrement, reset, edit, remove);
     item.append(emoji, summary, value, actions);
     list.append(item);
-  }
+  });
 
   return list;
 };
@@ -504,6 +528,31 @@ const resetCounter = async (counterId: string): Promise<void> => {
       ? { ...counter, value: counter.initialValue }
       : counter,
   );
+
+  await saveState({ counters });
+  render();
+};
+
+const moveCounter = async (
+  counterId: string,
+  direction: -1 | 1,
+): Promise<void> => {
+  const currentIndex = state.counters.findIndex(
+    (counter) => counter.id === counterId,
+  );
+  const nextIndex = currentIndex + direction;
+
+  if (
+    currentIndex === -1 ||
+    nextIndex < 0 ||
+    nextIndex >= state.counters.length
+  ) {
+    return;
+  }
+
+  const counters = [...state.counters];
+  const [counter] = counters.splice(currentIndex, 1);
+  counters.splice(nextIndex, 0, counter);
 
   await saveState({ counters });
   render();
