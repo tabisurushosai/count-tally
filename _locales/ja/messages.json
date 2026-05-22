@@ -1,1 +1,25 @@
-{ "extName": { "message": "かぞえカウンター" }, "extDesc": { "message": "複数のカウンターで何でも数える。プラス・マイナス・リセット。回数や個数の記録に。" } }
+{
+  "extName": { "message": "かぞえカウンター" },
+  "extDesc": {
+    "message": "複数のカウンターで何でも数える。プラス・マイナス・リセット。回数や個数の記録に。"
+  },
+  "appTitle": { "message": "かぞえカウンター" },
+  "emojiLabel": { "message": "絵文字" },
+  "nameLabel": { "message": "名前" },
+  "counterNamePlaceholder": { "message": "カウンター名" },
+  "initialValueLabel": { "message": "初期値" },
+  "stepLabel": { "message": "ステップ" },
+  "addCounter": { "message": "追加" },
+  "updateCounter": { "message": "更新" },
+  "cancelEdit": { "message": "キャンセル" },
+  "emptyState": { "message": "カウンターがありません" },
+  "counterListLabel": { "message": "カウンター一覧" },
+  "counterMeta": { "message": "初期値 $1 / ステップ $2" },
+  "moveUpLabel": { "message": "$1を上に移動" },
+  "moveDownLabel": { "message": "$1を下に移動" },
+  "incrementLabel": { "message": "$1を$2増やす" },
+  "decrementLabel": { "message": "$1を$2減らす" },
+  "resetCounter": { "message": "リセット" },
+  "editCounter": { "message": "編集" },
+  "deleteCounter": { "message": "削除" }
+}

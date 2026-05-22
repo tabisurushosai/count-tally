@@ -24,6 +24,13 @@ if (!app) {
   throw new Error("Popup root element was not found.");
 }
 
+const t = (key: string, substitutions?: string | string[]): string => {
+  const message = chrome.i18n.getMessage(key, substitutions);
+  return message || key;
+};
+
+document.title = t("appTitle");
+
 const style = document.createElement("style");
 style.textContent = `
   :root {
@@ -283,7 +290,7 @@ const render = (): void => {
   header.className = "popup-header";
 
   const title = document.createElement("h3");
-  title.textContent = "かぞえカウンター";
+  title.textContent = t("appTitle");
 
   header.append(title);
   shell.append(header, buildForm(), buildCounterList());
@@ -299,7 +306,7 @@ const buildForm = (): HTMLFormElement => {
   fieldRow.className = "field-row";
 
   const emojiLabel = document.createElement("label");
-  emojiLabel.textContent = "絵文字";
+  emojiLabel.textContent = t("emojiLabel");
   const emojiInput = document.createElement("input");
   emojiInput.name = "emoji";
   emojiInput.maxLength = 4;
@@ -307,17 +314,17 @@ const buildForm = (): HTMLFormElement => {
   emojiLabel.append(emojiInput);
 
   const nameLabel = document.createElement("label");
-  nameLabel.textContent = "名前";
+  nameLabel.textContent = t("nameLabel");
   const nameInput = document.createElement("input");
   nameInput.name = "name";
   nameInput.required = true;
   nameInput.maxLength = 40;
-  nameInput.placeholder = "カウンター名";
+  nameInput.placeholder = t("counterNamePlaceholder");
   nameInput.value = editingCounter?.name ?? "";
   nameLabel.append(nameInput);
 
   const initialLabel = document.createElement("label");
-  initialLabel.textContent = "初期値";
+  initialLabel.textContent = t("initialValueLabel");
   const initialInput = document.createElement("input");
   initialInput.name = "initialValue";
   initialInput.type = "number";
@@ -326,7 +333,7 @@ const buildForm = (): HTMLFormElement => {
   initialLabel.append(initialInput);
 
   const stepLabel = document.createElement("label");
-  stepLabel.textContent = "ステップ";
+  stepLabel.textContent = t("stepLabel");
   const stepInput = document.createElement("input");
   stepInput.name = "step";
   stepInput.type = "number";
@@ -343,13 +350,13 @@ const buildForm = (): HTMLFormElement => {
   const submit = document.createElement("button");
   submit.className = "primary";
   submit.type = "submit";
-  submit.textContent = editingCounter ? "更新" : "追加";
+  submit.textContent = editingCounter ? t("updateCounter") : t("addCounter");
   actions.append(submit);
 
   if (editingCounter) {
     const cancel = document.createElement("button");
     cancel.type = "button";
-    cancel.textContent = "キャンセル";
+    cancel.textContent = t("cancelEdit");
     cancel.addEventListener("click", () => {
       editingCounterId = null;
       render();
@@ -370,13 +377,13 @@ const buildCounterList = (): HTMLElement => {
   if (state.counters.length === 0) {
     const empty = document.createElement("p");
     empty.className = "empty-state";
-    empty.textContent = "カウンターがありません";
+    empty.textContent = t("emptyState");
     return empty;
   }
 
   const list = document.createElement("ul");
   list.className = "counter-list";
-  list.setAttribute("aria-label", "カウンター一覧");
+  list.setAttribute("aria-label", t("counterListLabel"));
 
   state.counters.forEach((counter, index) => {
     const item = document.createElement("li");
@@ -397,7 +404,10 @@ const buildCounterList = (): HTMLElement => {
 
     const initial = document.createElement("span");
     initial.className = "counter-initial";
-    initial.textContent = `初期値 ${counter.initialValue} / ステップ ${counter.step}`;
+    initial.textContent = t("counterMeta", [
+      counter.initialValue.toString(),
+      counter.step.toString(),
+    ]);
 
     summary.append(name, initial);
 
@@ -411,7 +421,7 @@ const buildCounterList = (): HTMLElement => {
     const moveUp = document.createElement("button");
     moveUp.type = "button";
     moveUp.disabled = index === 0;
-    moveUp.setAttribute("aria-label", `${counter.name}を上に移動`);
+    moveUp.setAttribute("aria-label", t("moveUpLabel", counter.name));
     moveUp.textContent = "↑";
     moveUp.addEventListener("click", () => {
       void moveCounter(counter.id, -1);
@@ -420,7 +430,7 @@ const buildCounterList = (): HTMLElement => {
     const moveDown = document.createElement("button");
     moveDown.type = "button";
     moveDown.disabled = index === state.counters.length - 1;
-    moveDown.setAttribute("aria-label", `${counter.name}を下に移動`);
+    moveDown.setAttribute("aria-label", t("moveDownLabel", counter.name));
     moveDown.textContent = "↓";
     moveDown.addEventListener("click", () => {
       void moveCounter(counter.id, 1);
@@ -428,7 +438,10 @@ const buildCounterList = (): HTMLElement => {
 
     const increment = document.createElement("button");
     increment.type = "button";
-    increment.setAttribute("aria-label", `${counter.name}を${counter.step}増やす`);
+    increment.setAttribute(
+      "aria-label",
+      t("incrementLabel", [counter.name, counter.step.toString()]),
+    );
     increment.textContent = "+";
     increment.addEventListener("click", () => {
       void updateCounterValue(counter.id, counter.value + counter.step);
@@ -436,7 +449,10 @@ const buildCounterList = (): HTMLElement => {
 
     const decrement = document.createElement("button");
     decrement.type = "button";
-    decrement.setAttribute("aria-label", `${counter.name}を${counter.step}減らす`);
+    decrement.setAttribute(
+      "aria-label",
+      t("decrementLabel", [counter.name, counter.step.toString()]),
+    );
     decrement.textContent = "-";
     decrement.addEventListener("click", () => {
       void updateCounterValue(counter.id, counter.value - counter.step);
@@ -444,14 +460,14 @@ const buildCounterList = (): HTMLElement => {
 
     const reset = document.createElement("button");
     reset.type = "button";
-    reset.textContent = "リセット";
+    reset.textContent = t("resetCounter");
     reset.addEventListener("click", () => {
       void resetCounter(counter.id);
     });
 
     const edit = document.createElement("button");
     edit.type = "button";
-    edit.textContent = "編集";
+    edit.textContent = t("editCounter");
     edit.addEventListener("click", () => {
       editingCounterId = counter.id;
       render();
@@ -460,7 +476,7 @@ const buildCounterList = (): HTMLElement => {
     const remove = document.createElement("button");
     remove.className = "danger";
     remove.type = "button";
-    remove.textContent = "削除";
+    remove.textContent = t("deleteCounter");
     remove.addEventListener("click", () => {
       void deleteCounter(counter.id);
     });

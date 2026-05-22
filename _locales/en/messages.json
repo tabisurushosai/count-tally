@@ -1,1 +1,25 @@
-{ "extName": { "message": "Tally Counter" }, "extDesc": { "message": "Count anything with multiple tally counters. Plus, minus, reset. Track reps or items." } }
+{
+  "extName": { "message": "Tally Counter" },
+  "extDesc": {
+    "message": "Count anything with multiple tally counters. Plus, minus, reset. Track reps or items."
+  },
+  "appTitle": { "message": "Tally Counter" },
+  "emojiLabel": { "message": "Emoji" },
+  "nameLabel": { "message": "Name" },
+  "counterNamePlaceholder": { "message": "Counter name" },
+  "initialValueLabel": { "message": "Initial" },
+  "stepLabel": { "message": "Step" },
+  "addCounter": { "message": "Add" },
+  "updateCounter": { "message": "Update" },
+  "cancelEdit": { "message": "Cancel" },
+  "emptyState": { "message": "No counters yet" },
+  "counterListLabel": { "message": "Counter list" },
+  "counterMeta": { "message": "Initial $1 / Step $2" },
+  "moveUpLabel": { "message": "Move $1 up" },
+  "moveDownLabel": { "message": "Move $1 down" },
+  "incrementLabel": { "message": "Increase $1 by $2" },
+  "decrementLabel": { "message": "Decrease $1 by $2" },
+  "resetCounter": { "message": "Reset" },
+  "editCounter": { "message": "Edit" },
+  "deleteCounter": { "message": "Delete" }
+}
