@@ -19,6 +19,23 @@
   "moveDownLabel": { "message": "$1を下に移動" },
   "incrementLabel": { "message": "$1を$2増やす" },
   "decrementLabel": { "message": "$1を$2減らす" },
+  "premiumTitle": { "message": "Premium" },
+  "premiumPurchased": { "message": "有効" },
+  "premiumTrialActive": { "message": "トライアル残り$1日" },
+  "premiumFree": { "message": "無料は$1件まで" },
+  "premiumFeaturesActive": {
+    "message": "無制限カウンター、日次自動リセット、合計表示が使えます。"
+  },
+  "premiumFeaturesLocked": {
+    "message": "Premiumで無制限カウンター、日次自動リセット、合計表示を有効化します。"
+  },
+  "startTrial": { "message": "7日トライアル" },
+  "openCheckout": { "message": "3ドルで購入" },
+  "dailyResetLabel": { "message": "日次自動リセット" },
+  "totalLabel": { "message": "合計" },
+  "freeLimitReached": {
+    "message": "無料プランでは$1件まで追加できます。"
+  },
   "resetCounter": { "message": "リセット" },
   "editCounter": { "message": "編集" },
   "deleteCounter": { "message": "削除" }

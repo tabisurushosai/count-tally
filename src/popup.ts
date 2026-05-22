@@ -9,13 +9,32 @@ type Counter = {
 
 type AppState = {
   counters: Counter[];
+  premium: PremiumState;
+};
+
+type PremiumState = {
+  trialStartedAt: string | null;
+  purchased: boolean;
+  dailyResetEnabled: boolean;
+  lastDailyResetDate: string | null;
 };
 
 const STORAGE_KEY = "countTallyState";
 const DEFAULT_EMOJI = "🔢";
 const DEFAULT_STEP = 1;
+const FREE_COUNTER_LIMIT = 3;
+const TRIAL_DAYS = 7;
+const CHECKOUT_URL = "https://buy.stripe.com/count-tally-premium";
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_PREMIUM: PremiumState = {
+  trialStartedAt: null,
+  purchased: false,
+  dailyResetEnabled: false,
+  lastDailyResetDate: null,
+};
 const DEFAULT_STATE: AppState = {
   counters: [],
+  premium: DEFAULT_PREMIUM,
 };
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -111,6 +130,65 @@ style.textContent = `
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+  }
+
+  .premium-panel {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid #d0d7de;
+    border-radius: 8px;
+    background: #f6f8fa;
+  }
+
+  .premium-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .premium-status {
+    color: #57606a;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .premium-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .daily-reset {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #1f2328;
+    font-size: 12px;
+  }
+
+  .daily-reset input {
+    width: auto;
+    min-height: auto;
+  }
+
+  .total-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid #d0d7de;
+    border-radius: 8px;
+    background: #ffffff;
+    font-weight: 700;
+  }
+
+  .form-message {
+    color: #cf222e;
+    font-size: 12px;
+    line-height: 1.35;
   }
 
   .counter-form {
@@ -251,6 +329,45 @@ const normalizeCounter = (
   return { ...counter, step };
 };
 
+const isStoredPremium = (value: unknown): value is Partial<PremiumState> => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    (candidate.trialStartedAt === null ||
+      typeof candidate.trialStartedAt === "string" ||
+      typeof candidate.trialStartedAt === "undefined") &&
+    (typeof candidate.purchased === "boolean" ||
+      typeof candidate.purchased === "undefined") &&
+    (typeof candidate.dailyResetEnabled === "boolean" ||
+      typeof candidate.dailyResetEnabled === "undefined") &&
+    (candidate.lastDailyResetDate === null ||
+      typeof candidate.lastDailyResetDate === "string" ||
+      typeof candidate.lastDailyResetDate === "undefined")
+  );
+};
+
+const normalizePremium = (premium: unknown): PremiumState => {
+  if (!isStoredPremium(premium)) {
+    return { ...DEFAULT_PREMIUM };
+  }
+
+  return {
+    trialStartedAt:
+      typeof premium.trialStartedAt === "string"
+        ? premium.trialStartedAt
+        : null,
+    purchased: premium.purchased === true,
+    dailyResetEnabled: premium.dailyResetEnabled === true,
+    lastDailyResetDate:
+      typeof premium.lastDailyResetDate === "string"
+        ? premium.lastDailyResetDate
+        : null,
+  };
+};
+
 const loadState = async (): Promise<AppState> => {
   const stored = await chrome.storage.local.get(STORAGE_KEY);
   const storedState = stored[STORAGE_KEY] as Partial<AppState> | undefined;
@@ -261,6 +378,7 @@ const loadState = async (): Promise<AppState> => {
 
   return {
     counters: storedState.counters.filter(isStoredCounter).map(normalizeCounter),
+    premium: normalizePremium(storedState.premium),
   };
 };
 
@@ -280,6 +398,29 @@ const createCounterId = (): string => {
 const getEditingCounter = (): Counter | undefined =>
   state.counters.find((counter) => counter.id === editingCounterId);
 
+const getTodayKey = (): string => new Date().toISOString().slice(0, 10);
+
+const getTrialDaysLeft = (): number => {
+  if (!state.premium.trialStartedAt) {
+    return 0;
+  }
+
+  const startedAt = Date.parse(state.premium.trialStartedAt);
+
+  if (!Number.isFinite(startedAt)) {
+    return 0;
+  }
+
+  const elapsedDays = Math.floor((Date.now() - startedAt) / DAY_IN_MS);
+  return Math.max(0, TRIAL_DAYS - elapsedDays);
+};
+
+const hasPremiumAccess = (): boolean =>
+  state.premium.purchased || getTrialDaysLeft() > 0;
+
+const getTotalValue = (): number =>
+  state.counters.reduce((total, counter) => total + counter.value, 0);
+
 const render = (): void => {
   app.innerHTML = "";
 
@@ -293,12 +434,107 @@ const render = (): void => {
   title.textContent = t("appTitle");
 
   header.append(title);
-  shell.append(header, buildForm(), buildCounterList());
+  shell.append(header, buildPremiumPanel(), buildForm());
+
+  if (hasPremiumAccess()) {
+    shell.append(buildTotalRow());
+  }
+
+  shell.append(buildCounterList());
   app.append(shell);
+};
+
+const buildPremiumPanel = (): HTMLElement => {
+  const hasAccess = hasPremiumAccess();
+  const trialDaysLeft = getTrialDaysLeft();
+  const panel = document.createElement("section");
+  panel.className = "premium-panel";
+
+  const head = document.createElement("div");
+  head.className = "premium-head";
+
+  const title = document.createElement("strong");
+  title.textContent = t("premiumTitle");
+
+  const status = document.createElement("span");
+  status.className = "premium-status";
+
+  if (state.premium.purchased) {
+    status.textContent = t("premiumPurchased");
+  } else if (trialDaysLeft > 0) {
+    status.textContent = t("premiumTrialActive", trialDaysLeft.toString());
+  } else {
+    status.textContent = t("premiumFree", FREE_COUNTER_LIMIT.toString());
+  }
+
+  head.append(title, status);
+
+  const description = document.createElement("p");
+  description.className = "premium-status";
+  description.textContent = hasAccess
+    ? t("premiumFeaturesActive")
+    : t("premiumFeaturesLocked");
+
+  const actions = document.createElement("div");
+  actions.className = "premium-actions";
+
+  const trial = document.createElement("button");
+  trial.type = "button";
+  trial.textContent = t("startTrial");
+  trial.disabled = Boolean(state.premium.trialStartedAt);
+  trial.addEventListener("click", () => {
+    void startTrial();
+  });
+
+  const checkout = document.createElement("button");
+  checkout.type = "button";
+  checkout.className = "primary";
+  checkout.textContent = t("openCheckout");
+  checkout.addEventListener("click", () => {
+    window.open(CHECKOUT_URL, "_blank", "noopener");
+  });
+
+  actions.append(trial, checkout);
+  panel.append(head, description, actions);
+
+  if (hasAccess) {
+    const dailyResetLabel = document.createElement("label");
+    dailyResetLabel.className = "daily-reset";
+
+    const dailyResetInput = document.createElement("input");
+    dailyResetInput.type = "checkbox";
+    dailyResetInput.checked = state.premium.dailyResetEnabled;
+    dailyResetInput.addEventListener("change", () => {
+      void setDailyResetEnabled(dailyResetInput.checked);
+    });
+
+    dailyResetLabel.append(dailyResetInput, t("dailyResetLabel"));
+    panel.append(dailyResetLabel);
+  }
+
+  return panel;
+};
+
+const buildTotalRow = (): HTMLElement => {
+  const total = document.createElement("div");
+  total.className = "total-row";
+
+  const label = document.createElement("span");
+  label.textContent = t("totalLabel");
+
+  const value = document.createElement("span");
+  value.textContent = getTotalValue().toString();
+
+  total.append(label, value);
+  return total;
 };
 
 const buildForm = (): HTMLFormElement => {
   const editingCounter = getEditingCounter();
+  const hasReachedFreeLimit =
+    !hasPremiumAccess() &&
+    !editingCounter &&
+    state.counters.length >= FREE_COUNTER_LIMIT;
   const form = document.createElement("form");
   form.className = "counter-form";
 
@@ -350,6 +586,7 @@ const buildForm = (): HTMLFormElement => {
   const submit = document.createElement("button");
   submit.className = "primary";
   submit.type = "submit";
+  submit.disabled = hasReachedFreeLimit;
   submit.textContent = editingCounter ? t("updateCounter") : t("addCounter");
   actions.append(submit);
 
@@ -370,6 +607,14 @@ const buildForm = (): HTMLFormElement => {
   });
 
   form.append(fieldRow, actions);
+
+  if (hasReachedFreeLimit) {
+    const message = document.createElement("p");
+    message.className = "form-message";
+    message.textContent = t("freeLimitReached", FREE_COUNTER_LIMIT.toString());
+    form.append(message);
+  }
+
   return form;
 };
 
@@ -508,8 +753,12 @@ const handleFormSubmit = async (formData: FormData): Promise<void> => {
         : counter,
     );
     editingCounterId = null;
-    await saveState({ counters });
+    await saveState({ ...state, counters });
     render();
+    return;
+  }
+
+  if (!hasPremiumAccess() && state.counters.length >= FREE_COUNTER_LIMIT) {
     return;
   }
 
@@ -522,7 +771,7 @@ const handleFormSubmit = async (formData: FormData): Promise<void> => {
     step,
   };
 
-  await saveState({ counters: [...state.counters, nextCounter] });
+  await saveState({ ...state, counters: [...state.counters, nextCounter] });
   render();
 };
 
@@ -534,7 +783,7 @@ const updateCounterValue = async (
     counter.id === counterId ? { ...counter, value } : counter,
   );
 
-  await saveState({ counters });
+  await saveState({ ...state, counters });
   render();
 };
 
@@ -545,7 +794,7 @@ const resetCounter = async (counterId: string): Promise<void> => {
       : counter,
   );
 
-  await saveState({ counters });
+  await saveState({ ...state, counters });
   render();
 };
 
@@ -570,7 +819,7 @@ const moveCounter = async (
   const [counter] = counters.splice(currentIndex, 1);
   counters.splice(nextIndex, 0, counter);
 
-  await saveState({ counters });
+  await saveState({ ...state, counters });
   render();
 };
 
@@ -581,12 +830,65 @@ const deleteCounter = async (counterId: string): Promise<void> => {
     editingCounterId = null;
   }
 
-  await saveState({ counters });
+  await saveState({ ...state, counters });
   render();
+};
+
+const startTrial = async (): Promise<void> => {
+  if (state.premium.trialStartedAt) {
+    return;
+  }
+
+  await saveState({
+    ...state,
+    premium: {
+      ...state.premium,
+      trialStartedAt: new Date().toISOString(),
+    },
+  });
+  render();
+};
+
+const setDailyResetEnabled = async (enabled: boolean): Promise<void> => {
+  await saveState({
+    ...state,
+    premium: {
+      ...state.premium,
+      dailyResetEnabled: enabled,
+      lastDailyResetDate: enabled
+        ? state.premium.lastDailyResetDate ?? getTodayKey()
+        : state.premium.lastDailyResetDate,
+    },
+  });
+  render();
+};
+
+const applyDailyResetIfNeeded = async (): Promise<void> => {
+  if (!hasPremiumAccess() || !state.premium.dailyResetEnabled) {
+    return;
+  }
+
+  const today = getTodayKey();
+
+  if (state.premium.lastDailyResetDate === today) {
+    return;
+  }
+
+  await saveState({
+    counters: state.counters.map((counter) => ({
+      ...counter,
+      value: counter.initialValue,
+    })),
+    premium: {
+      ...state.premium,
+      lastDailyResetDate: today,
+    },
+  });
 };
 
 const init = async (): Promise<void> => {
   state = await loadState();
+  await applyDailyResetIfNeeded();
   render();
 };
 

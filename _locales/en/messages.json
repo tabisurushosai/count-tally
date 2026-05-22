@@ -19,6 +19,23 @@
   "moveDownLabel": { "message": "Move $1 down" },
   "incrementLabel": { "message": "Increase $1 by $2" },
   "decrementLabel": { "message": "Decrease $1 by $2" },
+  "premiumTitle": { "message": "Premium" },
+  "premiumPurchased": { "message": "Active" },
+  "premiumTrialActive": { "message": "$1 trial days left" },
+  "premiumFree": { "message": "Free allows $1 counters" },
+  "premiumFeaturesActive": {
+    "message": "Unlimited counters, daily auto reset, and total display are available."
+  },
+  "premiumFeaturesLocked": {
+    "message": "Premium unlocks unlimited counters, daily auto reset, and total display."
+  },
+  "startTrial": { "message": "7-day trial" },
+  "openCheckout": { "message": "Buy for USD 3" },
+  "dailyResetLabel": { "message": "Daily auto reset" },
+  "totalLabel": { "message": "Total" },
+  "freeLimitReached": {
+    "message": "The free plan allows up to $1 counters."
+  },
   "resetCounter": { "message": "Reset" },
   "editCounter": { "message": "Edit" },
   "deleteCounter": { "message": "Delete" }
