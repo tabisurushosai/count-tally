@@ -1,0 +1,11 @@
+# count-tally TODO
+- [ ] T001: src/popup.ts に popup骨格(カウンター一覧)を構築
+- [ ] T002: カウンターCRUD(名前/絵文字/初期値)を chrome.storage.local に保存・読込
+- [ ] T003: プラス/マイナス/リセット、ステップ値設定を実装
+- [ ] T004: カウンターの並べ替え
+- [ ] T005: 起動時に storage.local から全状態を復元
+- [ ] T006: _locales ja/en を chrome.i18n で全UIに適用
+- [ ] T007: Premiumゲート(7日トライアル + Stripe Checkout URL)。無料は3カウンター、Premiumで無制限+日次自動リセット+合計表示
+- [ ] T008: npm run build を通し ts/lint を解消
+- [ ] T009: release/count-tally.zip 生成(node_modules除外)
+- [ ] T010: legal/PRIVACY.md と TERMS.md 作成(外部通信なし・データ収集なし)
