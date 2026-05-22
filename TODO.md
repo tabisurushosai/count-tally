@@ -1,5 +1,5 @@
 # count-tally TODO
-- [ ] T001: src/popup.ts に popup骨格(カウンター一覧)を構築
+- [x] T001: src/popup.ts に popup骨格(カウンター一覧)を構築
 - [ ] T002: カウンターCRUD(名前/絵文字/初期値)を chrome.storage.local に保存・読込
 - [ ] T003: プラス/マイナス/リセット、ステップ値設定を実装
 - [ ] T004: カウンターの並べ替え
