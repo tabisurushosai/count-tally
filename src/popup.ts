@@ -1,21 +1,26 @@
-type CounterPreview = {
+type Counter = {
   id: string;
   name: string;
   emoji: string;
+  initialValue: number;
   value: number;
 };
 
-const counters: CounterPreview[] = [
-  { id: "sample-1", name: "サンプル", emoji: "🔢", value: 0 },
-];
+type AppState = {
+  counters: Counter[];
+};
+
+const STORAGE_KEY = "countTallyState";
+const DEFAULT_EMOJI = "🔢";
+const DEFAULT_STATE: AppState = {
+  counters: [],
+};
 
 const app = document.querySelector<HTMLDivElement>("#app");
 
 if (!app) {
   throw new Error("Popup root element was not found.");
 }
-
-app.innerHTML = "";
 
 const style = document.createElement("style");
 style.textContent = `
@@ -37,8 +42,54 @@ style.textContent = `
     box-sizing: inherit;
   }
 
-  h3 {
+  h3,
+  p {
     margin: 0;
+  }
+
+  button,
+  input {
+    font: inherit;
+  }
+
+  button {
+    min-height: 32px;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #1f2328;
+    cursor: pointer;
+  }
+
+  button.primary {
+    border-color: #0969da;
+    background: #0969da;
+    color: #ffffff;
+    font-weight: 700;
+  }
+
+  button.danger {
+    color: #cf222e;
+  }
+
+  input {
+    width: 100%;
+    min-width: 0;
+    min-height: 32px;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    padding: 4px 8px;
+    color: #1f2328;
+    background: #ffffff;
+  }
+
+  label {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    color: #57606a;
+    font-size: 12px;
+    font-weight: 600;
   }
 
   .popup-shell {
@@ -50,6 +101,27 @@ style.textContent = `
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 8px;
+  }
+
+  .counter-form {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid #d0d7de;
+    border-radius: 8px;
+    background: #f6f8fa;
+  }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr) 80px;
+    gap: 8px;
+  }
+
+  .form-actions {
+    display: grid;
+    grid-template-columns: 1fr auto;
     gap: 8px;
   }
 
@@ -69,7 +141,7 @@ style.textContent = `
     padding: 8px;
     border: 1px solid #d0d7de;
     border-radius: 8px;
-    background: #f6f8fa;
+    background: #ffffff;
   }
 
   .counter-emoji {
@@ -78,14 +150,28 @@ style.textContent = `
     height: 32px;
     place-items: center;
     border-radius: 8px;
-    background: #ffffff;
+    background: #f6f8fa;
     font-size: 18px;
+  }
+
+  .counter-summary {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
   }
 
   .counter-name {
     overflow: hidden;
     font-size: 14px;
-    font-weight: 600;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .counter-initial {
+    overflow: hidden;
+    color: #57606a;
+    font-size: 12px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -98,8 +184,14 @@ style.textContent = `
     text-align: right;
   }
 
+  .row-actions {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
   .empty-state {
-    margin: 0;
     padding: 16px 8px;
     border: 1px dashed #d0d7de;
     border-radius: 8px;
@@ -109,29 +201,151 @@ style.textContent = `
 `;
 document.head.append(style);
 
-const shell = document.createElement("main");
-shell.className = "popup-shell";
+let state: AppState = DEFAULT_STATE;
+let editingCounterId: string | null = null;
 
-const header = document.createElement("header");
-header.className = "popup-header";
+const isStoredCounter = (value: unknown): value is Counter => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
 
-const title = document.createElement("h3");
-title.textContent = "かぞえカウンター";
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.name === "string" &&
+    typeof candidate.emoji === "string" &&
+    typeof candidate.initialValue === "number" &&
+    Number.isFinite(candidate.initialValue) &&
+    typeof candidate.value === "number" &&
+    Number.isFinite(candidate.value)
+  );
+};
 
-header.append(title);
-shell.append(header);
+const loadState = async (): Promise<AppState> => {
+  const stored = await chrome.storage.local.get(STORAGE_KEY);
+  const storedState = stored[STORAGE_KEY] as Partial<AppState> | undefined;
 
-if (counters.length === 0) {
-  const empty = document.createElement("p");
-  empty.className = "empty-state";
-  empty.textContent = "カウンターがありません";
-  shell.append(empty);
-} else {
+  if (!storedState || !Array.isArray(storedState.counters)) {
+    return { ...DEFAULT_STATE };
+  }
+
+  return {
+    counters: storedState.counters.filter(isStoredCounter),
+  };
+};
+
+const saveState = async (nextState: AppState): Promise<void> => {
+  state = nextState;
+  await chrome.storage.local.set({ [STORAGE_KEY]: nextState });
+};
+
+const createCounterId = (): string => {
+  if (typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `counter-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
+const getEditingCounter = (): Counter | undefined =>
+  state.counters.find((counter) => counter.id === editingCounterId);
+
+const render = (): void => {
+  app.innerHTML = "";
+
+  const shell = document.createElement("main");
+  shell.className = "popup-shell";
+
+  const header = document.createElement("header");
+  header.className = "popup-header";
+
+  const title = document.createElement("h3");
+  title.textContent = "かぞえカウンター";
+
+  header.append(title);
+  shell.append(header, buildForm(), buildCounterList());
+  app.append(shell);
+};
+
+const buildForm = (): HTMLFormElement => {
+  const editingCounter = getEditingCounter();
+  const form = document.createElement("form");
+  form.className = "counter-form";
+
+  const fieldRow = document.createElement("div");
+  fieldRow.className = "field-row";
+
+  const emojiLabel = document.createElement("label");
+  emojiLabel.textContent = "絵文字";
+  const emojiInput = document.createElement("input");
+  emojiInput.name = "emoji";
+  emojiInput.maxLength = 4;
+  emojiInput.value = editingCounter?.emoji ?? DEFAULT_EMOJI;
+  emojiLabel.append(emojiInput);
+
+  const nameLabel = document.createElement("label");
+  nameLabel.textContent = "名前";
+  const nameInput = document.createElement("input");
+  nameInput.name = "name";
+  nameInput.required = true;
+  nameInput.maxLength = 40;
+  nameInput.placeholder = "カウンター名";
+  nameInput.value = editingCounter?.name ?? "";
+  nameLabel.append(nameInput);
+
+  const initialLabel = document.createElement("label");
+  initialLabel.textContent = "初期値";
+  const initialInput = document.createElement("input");
+  initialInput.name = "initialValue";
+  initialInput.type = "number";
+  initialInput.step = "1";
+  initialInput.value = (editingCounter?.initialValue ?? 0).toString();
+  initialLabel.append(initialInput);
+
+  fieldRow.append(emojiLabel, nameLabel, initialLabel);
+
+  const actions = document.createElement("div");
+  actions.className = "form-actions";
+
+  const submit = document.createElement("button");
+  submit.className = "primary";
+  submit.type = "submit";
+  submit.textContent = editingCounter ? "更新" : "追加";
+  actions.append(submit);
+
+  if (editingCounter) {
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.textContent = "キャンセル";
+    cancel.addEventListener("click", () => {
+      editingCounterId = null;
+      render();
+    });
+    actions.append(cancel);
+  }
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void handleFormSubmit(new FormData(form));
+  });
+
+  form.append(fieldRow, actions);
+  return form;
+};
+
+const buildCounterList = (): HTMLElement => {
+  if (state.counters.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "カウンターがありません";
+    return empty;
+  }
+
   const list = document.createElement("ul");
   list.className = "counter-list";
   list.setAttribute("aria-label", "カウンター一覧");
 
-  for (const counter of counters) {
+  for (const counter of state.counters) {
     const item = document.createElement("li");
     item.className = "counter-row";
     item.dataset.counterId = counter.id;
@@ -141,19 +355,99 @@ if (counters.length === 0) {
     emoji.setAttribute("aria-hidden", "true");
     emoji.textContent = counter.emoji;
 
+    const summary = document.createElement("div");
+    summary.className = "counter-summary";
+
     const name = document.createElement("span");
     name.className = "counter-name";
     name.textContent = counter.name;
+
+    const initial = document.createElement("span");
+    initial.className = "counter-initial";
+    initial.textContent = `初期値 ${counter.initialValue}`;
+
+    summary.append(name, initial);
 
     const value = document.createElement("span");
     value.className = "counter-value";
     value.textContent = counter.value.toString();
 
-    item.append(emoji, name, value);
+    const actions = document.createElement("div");
+    actions.className = "row-actions";
+
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.textContent = "編集";
+    edit.addEventListener("click", () => {
+      editingCounterId = counter.id;
+      render();
+    });
+
+    const remove = document.createElement("button");
+    remove.className = "danger";
+    remove.type = "button";
+    remove.textContent = "削除";
+    remove.addEventListener("click", () => {
+      void deleteCounter(counter.id);
+    });
+
+    actions.append(edit, remove);
+    item.append(emoji, summary, value, actions);
     list.append(item);
   }
 
-  shell.append(list);
-}
+  return list;
+};
 
-app.append(shell);
+const handleFormSubmit = async (formData: FormData): Promise<void> => {
+  const name = String(formData.get("name") ?? "").trim();
+  const emoji = String(formData.get("emoji") ?? "").trim() || DEFAULT_EMOJI;
+  const initialValue = Number(formData.get("initialValue") ?? 0);
+
+  if (!name || !Number.isFinite(initialValue)) {
+    return;
+  }
+
+  const editingCounter = getEditingCounter();
+
+  if (editingCounter) {
+    const counters = state.counters.map((counter) =>
+      counter.id === editingCounter.id
+        ? { ...counter, name, emoji, initialValue }
+        : counter,
+    );
+    editingCounterId = null;
+    await saveState({ counters });
+    render();
+    return;
+  }
+
+  const nextCounter: Counter = {
+    id: createCounterId(),
+    name,
+    emoji,
+    initialValue,
+    value: initialValue,
+  };
+
+  await saveState({ counters: [...state.counters, nextCounter] });
+  render();
+};
+
+const deleteCounter = async (counterId: string): Promise<void> => {
+  const counters = state.counters.filter((counter) => counter.id !== counterId);
+
+  if (editingCounterId === counterId) {
+    editingCounterId = null;
+  }
+
+  await saveState({ counters });
+  render();
+};
+
+const init = async (): Promise<void> => {
+  state = await loadState();
+  render();
+};
+
+void init();
