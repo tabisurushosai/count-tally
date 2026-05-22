@@ -4,6 +4,7 @@ type Counter = {
   emoji: string;
   initialValue: number;
   value: number;
+  step: number;
 };
 
 type AppState = {
@@ -12,6 +13,7 @@ type AppState = {
 
 const STORAGE_KEY = "countTallyState";
 const DEFAULT_EMOJI = "🔢";
+const DEFAULT_STEP = 1;
 const DEFAULT_STATE: AppState = {
   counters: [],
 };
@@ -115,7 +117,7 @@ style.textContent = `
 
   .field-row {
     display: grid;
-    grid-template-columns: 48px minmax(0, 1fr) 80px;
+    grid-template-columns: 44px minmax(0, 1fr) 68px 68px;
     gap: 8px;
   }
 
@@ -187,7 +189,7 @@ style.textContent = `
   .row-actions {
     grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 8px;
   }
 
@@ -204,7 +206,9 @@ document.head.append(style);
 let state: AppState = DEFAULT_STATE;
 let editingCounterId: string | null = null;
 
-const isStoredCounter = (value: unknown): value is Counter => {
+const isStoredCounter = (value: unknown): value is Omit<Counter, "step"> & {
+  step?: unknown;
+} => {
   if (!value || typeof value !== "object") {
     return false;
   }
@@ -221,6 +225,19 @@ const isStoredCounter = (value: unknown): value is Counter => {
   );
 };
 
+const normalizeCounter = (
+  counter: Omit<Counter, "step"> & { step?: unknown },
+): Counter => {
+  const step =
+    typeof counter.step === "number" &&
+    Number.isFinite(counter.step) &&
+    counter.step > 0
+      ? counter.step
+      : DEFAULT_STEP;
+
+  return { ...counter, step };
+};
+
 const loadState = async (): Promise<AppState> => {
   const stored = await chrome.storage.local.get(STORAGE_KEY);
   const storedState = stored[STORAGE_KEY] as Partial<AppState> | undefined;
@@ -230,7 +247,7 @@ const loadState = async (): Promise<AppState> => {
   }
 
   return {
-    counters: storedState.counters.filter(isStoredCounter),
+    counters: storedState.counters.filter(isStoredCounter).map(normalizeCounter),
   };
 };
 
@@ -302,7 +319,17 @@ const buildForm = (): HTMLFormElement => {
   initialInput.value = (editingCounter?.initialValue ?? 0).toString();
   initialLabel.append(initialInput);
 
-  fieldRow.append(emojiLabel, nameLabel, initialLabel);
+  const stepLabel = document.createElement("label");
+  stepLabel.textContent = "ステップ";
+  const stepInput = document.createElement("input");
+  stepInput.name = "step";
+  stepInput.type = "number";
+  stepInput.min = "1";
+  stepInput.step = "1";
+  stepInput.value = (editingCounter?.step ?? DEFAULT_STEP).toString();
+  stepLabel.append(stepInput);
+
+  fieldRow.append(emojiLabel, nameLabel, initialLabel, stepLabel);
 
   const actions = document.createElement("div");
   actions.className = "form-actions";
@@ -364,7 +391,7 @@ const buildCounterList = (): HTMLElement => {
 
     const initial = document.createElement("span");
     initial.className = "counter-initial";
-    initial.textContent = `初期値 ${counter.initialValue}`;
+    initial.textContent = `初期値 ${counter.initialValue} / ステップ ${counter.step}`;
 
     summary.append(name, initial);
 
@@ -374,6 +401,29 @@ const buildCounterList = (): HTMLElement => {
 
     const actions = document.createElement("div");
     actions.className = "row-actions";
+
+    const increment = document.createElement("button");
+    increment.type = "button";
+    increment.setAttribute("aria-label", `${counter.name}を${counter.step}増やす`);
+    increment.textContent = "+";
+    increment.addEventListener("click", () => {
+      void updateCounterValue(counter.id, counter.value + counter.step);
+    });
+
+    const decrement = document.createElement("button");
+    decrement.type = "button";
+    decrement.setAttribute("aria-label", `${counter.name}を${counter.step}減らす`);
+    decrement.textContent = "-";
+    decrement.addEventListener("click", () => {
+      void updateCounterValue(counter.id, counter.value - counter.step);
+    });
+
+    const reset = document.createElement("button");
+    reset.type = "button";
+    reset.textContent = "リセット";
+    reset.addEventListener("click", () => {
+      void resetCounter(counter.id);
+    });
 
     const edit = document.createElement("button");
     edit.type = "button";
@@ -391,7 +441,7 @@ const buildCounterList = (): HTMLElement => {
       void deleteCounter(counter.id);
     });
 
-    actions.append(edit, remove);
+    actions.append(increment, decrement, reset, edit, remove);
     item.append(emoji, summary, value, actions);
     list.append(item);
   }
@@ -403,8 +453,9 @@ const handleFormSubmit = async (formData: FormData): Promise<void> => {
   const name = String(formData.get("name") ?? "").trim();
   const emoji = String(formData.get("emoji") ?? "").trim() || DEFAULT_EMOJI;
   const initialValue = Number(formData.get("initialValue") ?? 0);
+  const step = Number(formData.get("step") ?? DEFAULT_STEP);
 
-  if (!name || !Number.isFinite(initialValue)) {
+  if (!name || !Number.isFinite(initialValue) || !Number.isFinite(step) || step <= 0) {
     return;
   }
 
@@ -413,7 +464,7 @@ const handleFormSubmit = async (formData: FormData): Promise<void> => {
   if (editingCounter) {
     const counters = state.counters.map((counter) =>
       counter.id === editingCounter.id
-        ? { ...counter, name, emoji, initialValue }
+        ? { ...counter, name, emoji, initialValue, step }
         : counter,
     );
     editingCounterId = null;
@@ -428,9 +479,33 @@ const handleFormSubmit = async (formData: FormData): Promise<void> => {
     emoji,
     initialValue,
     value: initialValue,
+    step,
   };
 
   await saveState({ counters: [...state.counters, nextCounter] });
+  render();
+};
+
+const updateCounterValue = async (
+  counterId: string,
+  value: number,
+): Promise<void> => {
+  const counters = state.counters.map((counter) =>
+    counter.id === counterId ? { ...counter, value } : counter,
+  );
+
+  await saveState({ counters });
+  render();
+};
+
+const resetCounter = async (counterId: string): Promise<void> => {
+  const counters = state.counters.map((counter) =>
+    counter.id === counterId
+      ? { ...counter, value: counter.initialValue }
+      : counter,
+  );
+
+  await saveState({ counters });
   render();
 };
 
